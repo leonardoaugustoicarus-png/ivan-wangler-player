@@ -1,33 +1,33 @@
-# Aura Hi-Res Player 🎧
+# 🎧 Aura Hi-Res Player — Deep Night Blue Edition
 
-**Aura Hi-Res Player** é um reprodutor de música mobile de última geração, focado em uma experiência audiófila com a estética exclusiva *Deep Night Blue*. Desenvolvido com foco em design premium e processamento de áudio de alta fidelidade.
+**Aura Hi-Res Player** é um reprodutor de música de última geração focado em alta fidelidade e design premium. Combinando técnicas avançadas de Processamento Digital de Sinais (DSP) com uma interface imersiva em Glassmorphism, ele transforma a web em um console audiófilo de elite.
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![React](https://img.shields.io/badge/React-18-blue.svg)
-![Tailwind](https://img.shields.io/badge/Tailwind-v4-blue.svg)
+---
 
-## ✨ Estética e Design
+## ✨ Destaques de Design
+- **Deep Night Blue**: Estética baseada em azul meia-noite profundo com acentos neon.
+- **Glassmorphism 2.0**: Controles com efeito de vidro fosco, profundidade real e sombras suaves.
+- **Dynamic Theming**: A interface se adapta sutilmente às cores da capa do álbum em reprodução.
 
-O aplicativo utiliza uma linguagem visual moderna baseada em:
-- **Deep Night Blue Theme**: Uma paleta de cores imersiva baseada em azul meia-noite profundo com acentos em azul neon.
-- **Glassmorphism**: Efeitos de vidro fosco em todos os controles, proporcionando profundidade e sofisticação.
-- **Tipografia Premium**: Utilização das fontes *Outfit* para títulos e *Inter* para interface, garantindo clareza e elegância.
+## 🚀 Engenharia de Áudio (DSP)
+- **Neural Upsampling**: IA para melhoria de clareza em arquivos padrão.
+- **15-Band Parametric EQ**: Controle total de frequências para audição crítica.
+- **Phase Correction**: Algoritmos de correção de fase linear para maior precisão sonora.
+- **Smart Crossfade**: Transições imperceptíveis entre faixas.
+- **Spectrum Analyzer**: Visualização de frequências em tempo real integradas ao player.
 
-## 🚀 Funcionalidades Principais
+## 🛠️ Tecnologias de Ponta
+- **Framework**: React 19 + TypeScript
+- **Bundler**: Vite 6 (Ultra-fast HMR)
+- **Styling**: Tailwind CSS v4 (Modern Engine)
+- **Audio Core**: Web Audio API com processamento de 32-bit float.
+- **Animations**: Framer Motion
+- **Storage**: IndexedDB (Biblioteca Local Persistente)
 
-- **Motor DSP de Elite**: Upsampling neural via IA, correção de fase linear e crossfade inteligente.
-- **Equalizador Paramétrico**: 15 bandas de precisão com visualização de espectro em tempo real.
-- **Interface Hi-Res**: Suporte visual e técnico para áudio 24-bit/192kHz.
-- **Letras Sincronizadas**: Exibição fluida com precisão de milissegundos.
-- **Arquitetura Otimizada**: Componentes modulares e animações de alto desempenho com Framer Motion.
-
-## 🛠️ Tecnologias
-
-- **Frontend**: React 18, TypeScript, Vite
-- **Estilização**: Tailwind CSS v4
-- **Animações**: Framer Motion
-- **Áudio**: Web Audio API
+## 📦 Como Rodar
+1. Clone o repositório
+2. Instale as dependências: `npm install`
+3. Inicie o servidor: `npm run dev`
 
 ---
 Criado com ❤️ por **Ivan Wangler**
-# ivan-wangler-player
