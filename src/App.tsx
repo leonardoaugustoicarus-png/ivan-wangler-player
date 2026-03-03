@@ -349,29 +349,34 @@ export default function App() {
         jsmediatags.read(fileToProcess, {
           onSuccess: (tag: any) => {
             const { title, artist, picture } = tag.tags;
-            let coverUrl = '';
             if (picture) {
               const { data, format } = picture;
               const uint8Array = new Uint8Array(data);
               const coverBlob = new Blob([uint8Array], { type: format });
-              const coverUrl = URL.createObjectURL(coverBlob);
+              // Create temporary URL only for extraction
+              const tempUrl = URL.createObjectURL(coverBlob);
 
               setTrackInfo({
                 title: title || trackTitle,
                 artist: artist || trackArtist,
-                coverUrl: coverUrl,
+                coverBlob: coverBlob,
+                coverUrl: '', // Will be handled by CoverImage
                 lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
               });
-              extractDominantColor(coverUrl).then(setAccentColor);
+              extractDominantColor(tempUrl).then(setAccentColor).finally(() => {
+                setTimeout(() => URL.revokeObjectURL(tempUrl), 1000);
+              });
+
               if (trackId) {
                 const track = libraryTracks.find(t => t.id === trackId);
-                if (track) saveTrack({ ...track, coverBlob, coverUrl }).catch(() => { });
+                if (track) saveTrack({ ...track, coverBlob }).catch(() => { });
               }
             } else {
               setTrackInfo({
                 title: title || trackTitle,
                 artist: artist || trackArtist,
                 coverUrl: '',
+                coverBlob: null,
                 lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
               });
               setAccentColor('#EAB308');
@@ -381,13 +386,13 @@ export default function App() {
           },
           onError: (error: any) => {
             console.warn('Error reading tags:', error);
-            setTrackInfo({ title: trackTitle, artist: trackArtist, coverUrl: '', lyrics: (file as any).lyrics || '' });
+            setTrackInfo({ title: trackTitle, artist: trackArtist, coverUrl: '', coverBlob: null, lyrics: (file as any).lyrics || '' });
             fetchAICover(trackTitle, trackArtist, trackId);
             if (autoEq) fetchAIEQProfile(trackTitle, trackArtist);
           }
         });
       } else {
-        setTrackInfo({ title: trackTitle, artist: trackArtist, coverUrl: '', lyrics: (file as any).lyrics || '' });
+        setTrackInfo({ title: trackTitle, artist: trackArtist, coverUrl: '', coverBlob: null, lyrics: (file as any).lyrics || '' });
         fetchAICover(trackTitle, trackArtist, trackId);
         if (autoEq) fetchAIEQProfile(trackTitle, trackArtist);
       }
@@ -444,19 +449,22 @@ export default function App() {
         // Fetch image as Blob for persistence
         const imgResp = await fetch(dynamicUrl);
         const coverBlob = await imgResp.blob();
-        const coverUrl = URL.createObjectURL(coverBlob);
+        const tempUrl = URL.createObjectURL(coverBlob);
 
         setTrackInfo(prev => ({
           ...prev,
-          coverUrl: coverUrl
+          coverBlob: coverBlob,
+          coverUrl: ''
         }));
-        extractDominantColor(coverUrl).then(setAccentColor);
+        extractDominantColor(tempUrl).then(setAccentColor).finally(() => {
+          setTimeout(() => URL.revokeObjectURL(tempUrl), 1000);
+        });
 
         // Persist AI cover back to DB if track exists
         if (trackId) {
           const track = libraryTracks.find(t => t.id === trackId);
           if (track) {
-            saveTrack({ ...track, coverBlob, coverUrl }).catch(err => console.warn('Failed to persist AI cover:', err));
+            saveTrack({ ...track, coverBlob }).catch(err => console.warn('Failed to persist AI cover:', err));
           }
         }
       } catch (err) {
@@ -472,20 +480,27 @@ export default function App() {
       setRecentTracks(prev => [newTrack, ...prev.filter(t => t.id !== newTrack.id)].slice(0, 20));
     } else if (file.isFile && file.file) {
       // If playing from library object that already has metadata
-      if (file.coverUrl) {
-        const url = URL.createObjectURL(file.file);
-        setAudioSource(url);
-        setTrackInfo({
-          title: file.title,
-          artist: file.artist,
-          coverUrl: file.coverUrl,
-          lyrics: file.lyrics || ''
+      const audioUrl = URL.createObjectURL(file.file);
+      setAudioSource(audioUrl);
+
+      setTrackInfo({
+        title: file.title,
+        artist: file.artist,
+        coverUrl: file.coverUrl || '',
+        coverBlob: file.coverBlob,
+        lyrics: file.lyrics || ''
+      });
+
+      if (file.coverBlob) {
+        const tempUrl = URL.createObjectURL(file.coverBlob);
+        extractDominantColor(tempUrl).then(setAccentColor).finally(() => {
+          setTimeout(() => URL.revokeObjectURL(tempUrl), 1000);
         });
+      } else if (file.coverUrl) {
         extractDominantColor(file.coverUrl).then(setAccentColor);
-        if (autoEq) fetchAIEQProfile(file.title, file.artist);
-      } else {
-        processFile(file.file, file.title, file.artist, file.id);
       }
+
+      if (autoEq) fetchAIEQProfile(file.title, file.artist);
 
       let idx = queue.findIndex(t => t.id === file.id);
       if (idx === -1) {
@@ -500,8 +515,20 @@ export default function App() {
       setRecentTracks(prev => [file, ...prev.filter(t => t.id !== file.id)].slice(0, 20));
     } else {
       setAudioSource(null);
-      setTrackInfo({ title: file.title, artist: file.artist, coverUrl: file.coverUrl || '', lyrics: file.lyrics || '' });
-      if (file.coverUrl) {
+      setTrackInfo({
+        title: file.title,
+        artist: file.artist,
+        coverUrl: file.coverUrl || '',
+        coverBlob: file.coverBlob,
+        lyrics: file.lyrics || ''
+      });
+
+      if (file.coverBlob) {
+        const tempUrl = URL.createObjectURL(file.coverBlob);
+        extractDominantColor(tempUrl).then(setAccentColor).finally(() => {
+          setTimeout(() => URL.revokeObjectURL(tempUrl), 1000);
+        });
+      } else if (file.coverUrl) {
         extractDominantColor(file.coverUrl).then(setAccentColor);
       } else {
         setAccentColor('#EAB308');
@@ -591,7 +618,7 @@ export default function App() {
         folder: folderName,
         lyrics: lrcMap.get(metadata.title) || lrcMap.get(file.name.replace(/\.[^/.]+$/, '')) || '',
         coverBlob: metadata.coverBlob,
-        coverUrl: metadata.coverBlob ? URL.createObjectURL(metadata.coverBlob) : ''
+        coverUrl: '' // Will be handled by CoverImage component
       };
       newTracks.push(track);
     }

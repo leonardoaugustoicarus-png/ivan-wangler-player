@@ -1,7 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'motion/react';
-import { Palette, Trash2, ShieldCheck, ChevronRight, Laptop, Folder, Share2, Download, Upload, Loader2 } from 'lucide-react';
-import { clearAllTracks, exportLibraryData, importLibraryData } from '../utils/db';
+import { clearAllTracks, exportLibraryData, importLibraryData, getAllTracks } from '../utils/db';
 
 interface SettingsProps {
     accentColor: string;
@@ -22,6 +19,10 @@ export default function Settings({ accentColor, setAccentColor }: SettingsProps)
     const [isImporting, setIsImporting] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const [diagVisible, setDiagVisible] = useState(false);
+    const [diagCount, setDiagCount] = useState(0);
+    const [trackCount, setTrackCount] = useState(0);
+
     useEffect(() => {
         if (navigator.storage && navigator.storage.estimate) {
             navigator.storage.estimate().then(estimate => {
@@ -31,7 +32,19 @@ export default function Settings({ accentColor, setAccentColor }: SettingsProps)
                 });
             });
         }
+        // Also fetch track count for diagnostics
+        getAllTracks().then((tracks: any[]) => setTrackCount(tracks.length));
     }, [isImporting]);
+
+    const handleDiagClick = () => {
+        setDiagCount(prev => {
+            if (prev + 1 >= 5) {
+                setDiagVisible(true);
+                return 0;
+            }
+            return prev + 1;
+        });
+    };
 
     const handleClearLibrary = async () => {
         if (confirm('Tem certeza que deseja apagar toda a biblioteca permanentemente?')) {
@@ -129,8 +142,20 @@ export default function Settings({ accentColor, setAccentColor }: SettingsProps)
                 <section>
                     <div className="flex items-center space-x-3 mb-4">
                         <Share2 size={18} className="text-accent" />
-                        <h3 className="text-[10px] uppercase tracking-[0.2em] font-display font-bold text-white/40">Sincronização & Backup</h3>
+                        <h3 className="text-[10px] uppercase tracking-[0.2em] font-display font-bold text-white/40 cursor-pointer select-none" onClick={handleDiagClick}>Sincronização & Backup</h3>
                     </div>
+                    {diagVisible && (
+                        <div className="mx-6 mb-4 p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
+                            <p className="text-[10px] font-mono text-accent">DIAGNOSTIC MODE ENABLED</p>
+                            <div className="grid grid-cols-2 gap-2 text-[9px] text-white/60 font-mono">
+                                <p>Tracks DB: {trackCount}</p>
+                                <p>jsmediatags: {(window as any).jsmediatags ? 'OK' : 'FAIL'}</p>
+                                <p>Storage: {(storageInfo.used / 1024 / 1024).toFixed(1)}MB</p>
+                                <p>UA: {navigator.userAgent.includes('Mobi') ? 'Mobile' : 'Desktop'}</p>
+                            </div>
+                            <button onClick={() => setDiagVisible(false)} className="text-[9px] text-white/20 hover:text-white underline mt-2">Close Diagnostics</button>
+                        </div>
+                    )}
                     <div className="glass-card rounded-[32px] overflow-hidden border-white/5 divide-y divide-white/5">
                         <button
                             onClick={handleExport}

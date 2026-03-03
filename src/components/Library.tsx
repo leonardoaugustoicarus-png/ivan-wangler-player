@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, Folder, Music2, Heart, MoreVertical, PlayCircle, Upload, Trash2, ListPlus, Disc3, Pencil } from 'lucide-react';
+import CoverImage from './CoverImage';
 
 interface Track {
   id: number;
@@ -9,6 +10,7 @@ interface Track {
   format?: string;
   duration?: string;
   coverUrl?: string;
+  coverBlob?: Blob | null;
   folder?: string;
 }
 
@@ -87,13 +89,13 @@ export default function Library({
     >
       <div
         onClick={() => onSelectTrack(track)}
-        className="relative w-14 h-14 rounded-2xl overflow-hidden mr-4 shadow-xl flex-shrink-0 bg-white/5 flex items-center justify-center"
+        className="relative w-14 h-14 rounded-2xl overflow-hidden mr-4 shadow-xl flex-shrink-0 bg-white/5 flex items-center justify-center border border-white/5"
       >
-        {track.coverUrl ? (
-          <img src={track.coverUrl} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <Music2 size={24} className="text-white/20" />
-        )}
+        <CoverImage
+          blob={track.coverBlob}
+          url={track.coverUrl}
+          className="w-full h-full"
+        />
         <div className={`absolute inset-0 flex items-center justify-center transition-opacity ${currentTrackId === track.id ? 'opacity-100 bg-accent/20' : 'opacity-0 group-hover:opacity-100 bg-black/40'}`}>
           <PlayCircle size={24} className="text-white drop-shadow-lg" />
         </div>

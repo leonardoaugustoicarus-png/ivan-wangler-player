@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, useMotionValue, useTransform, AnimatePresence } from 'motion/react';
 import { Play, Pause, SkipBack, SkipForward, Repeat, Shuffle, Volume2, Languages } from 'lucide-react';
 import SpectrumAnalyzer from './SpectrumAnalyzer';
+import CoverImage from './CoverImage';
 
 interface PlayerProps {
   isPlaying: boolean;
@@ -9,7 +10,7 @@ interface PlayerProps {
   accentColor: string;
   audioSource: string | null;
   audioRef: React.RefObject<HTMLAudioElement | null>;
-  trackInfo: { title: string; artist: string; coverUrl?: string; lyrics?: string };
+  trackInfo: { title: string; artist: string; coverUrl?: string; coverBlob?: Blob | null; lyrics?: string };
   onNext: () => void;
   onPrevious: () => void;
   volume: number;
@@ -17,7 +18,7 @@ interface PlayerProps {
   analyser: AnalyserNode | null;
   isHiRes?: boolean;
   is24Bit?: boolean;
-  nextTrack?: { title: string; artist: string; coverUrl?: string; lyrics?: string };
+  nextTrack?: { title: string; artist: string; coverUrl?: string; coverBlob?: Blob | null; lyrics?: string };
   isShuffle: boolean;
   setIsShuffle: (v: boolean) => void;
   isRepeat: boolean;
@@ -165,11 +166,10 @@ export default function Player({
             className={`absolute inset-0 blur-[30px] opacity-30 transition-all duration-1000 ${isVinylMode ? 'rounded-full' : 'rounded-[28px]'}`}
             style={{ backgroundColor: accentColor }}
           />
-          <img
-            src={trackInfo.coverUrl || (trackInfo.title === 'No Track Selected' ? 'https://i.postimg.cc/W4ND1Ypt/aguia.webp' : 'https://picsum.photos/seed/music/600/600')}
-            alt="Album Art"
-            className={`w-full h-full object-cover shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative z-10 border transition-all duration-300 ${isVinylMode ? 'rounded-full border-black/80 ring-[8px] ring-black border-[12px] animate-spin-slow' : 'rounded-[28px] border-white/10'}`}
-            referrerPolicy="no-referrer"
+          <CoverImage
+            blob={trackInfo.coverBlob}
+            url={trackInfo.coverUrl || (trackInfo.title === 'No Track Selected' ? 'https://i.postimg.cc/W4ND1Ypt/aguia.webp' : 'https://picsum.photos/seed/music/600/600')}
+            className={`w-full h-full shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative z-10 border transition-all duration-300 ${isVinylMode ? 'rounded-full border-black/80 ring-[8px] ring-black border-[12px] animate-spin-slow' : 'rounded-[28px] border-white/10'}`}
           />
           {/* Vinyl inner groove decoration */}
           {isVinylMode && (
@@ -341,11 +341,10 @@ export default function Player({
         {nextTrack ? (
           <div className="flex items-center space-x-3 p-2 rounded-2xl glass-card border-white/5">
             <div className="w-8 h-8 rounded-lg overflow-hidden">
-              <img
-                src={nextTrack.coverUrl || 'https://i.postimg.cc/W4ND1Ypt/aguia.webp'}
-                alt="Next"
-                className="w-full h-full object-cover opacity-60"
-                referrerPolicy="no-referrer"
+              <CoverImage
+                blob={nextTrack.coverBlob}
+                url={nextTrack.coverUrl || 'https://i.postimg.cc/W4ND1Ypt/aguia.webp'}
+                className="w-full h-full opacity-60"
               />
             </div>
             <div className="flex-1 min-w-0">
