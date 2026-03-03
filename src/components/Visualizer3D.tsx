@@ -6,6 +6,20 @@ interface Visualizer3DProps {
     accentColor: string;
 }
 
+const applyOpacity = (color: string, opacity: number): string => {
+    // If it's hex, add hex alpha
+    if (color.startsWith('#')) {
+        const alpha = Math.round(opacity * 255).toString(16).padStart(2, '0');
+        return `${color}${alpha}`;
+    }
+    // If it's rgb, convert to rgba
+    if (color.startsWith('rgb(')) {
+        return color.replace('rgb(', 'rgba(').replace(')', `, ${opacity})`);
+    }
+    // Fallback/already rgba/hsl
+    return color;
+};
+
 export default function Visualizer3D({ analyser, isPlaying, accentColor }: Visualizer3DProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const requestRef = useRef<number>(null);
@@ -24,8 +38,6 @@ export default function Visualizer3D({ analyser, isPlaying, accentColor }: Visua
             height = canvas.height = window.innerHeight;
         };
         window.addEventListener('resize', handleResize);
-
-        // Parse accent color (assuming rgb/hex/hsl format, extract raw for opacity manipulation if needed, but we'll use globalAlpha)
 
         // Particle system
         const numParticles = 150;
@@ -54,8 +66,8 @@ export default function Visualizer3D({ analyser, isPlaying, accentColor }: Visua
 
             // Subtle atmospheric background
             const gradient = ctx.createRadialGradient(width / 2, height, 0, width / 2, height, height * 1.5);
-            gradient.addColorStop(0, `${accentColor}1A`); // 10% opacity
-            gradient.addColorStop(0.5, `${accentColor}05`); // 2% opacity
+            gradient.addColorStop(0, applyOpacity(accentColor, 0.1)); // 10% opacity
+            gradient.addColorStop(0.5, applyOpacity(accentColor, 0.02)); // 2% opacity
             gradient.addColorStop(1, 'transparent');
 
             ctx.fillStyle = gradient;
@@ -73,14 +85,14 @@ export default function Visualizer3D({ analyser, isPlaying, accentColor }: Visua
                 for (let i = 0; i < bassBins; i++) {
                     bassSum += dataArray[i];
                 }
-                const currentBass = bassSum / bassBins / 255; // 0 to 1
+                const currentBass = (bassBins > 0) ? bassSum / bassBins / 255 : 0; // Guard NaN
 
                 // Calculate Mids (approx 250-2000Hz)
                 let midSum = 0;
                 for (let i = bassBins; i < bassBins * 4; i++) {
                     midSum += dataArray[i];
                 }
-                midFactor = midSum / (bassBins * 3) / 255;
+                midFactor = (bassBins > 0) ? midSum / (bassBins * 3) / 255 : 0;
 
                 // Smooth the bass jump
                 smoothBass += (currentBass - smoothBass) * 0.15;
@@ -89,6 +101,10 @@ export default function Visualizer3D({ analyser, isPlaying, accentColor }: Visua
                 smoothBass += (0 - smoothBass) * 0.05;
                 bassFactor = smoothBass;
             }
+
+            // Guard against NaN in scale
+            bassFactor = isNaN(bassFactor) ? 0 : bassFactor;
+            midFactor = isNaN(midFactor) ? 0 : midFactor;
 
             ctx.fillStyle = accentColor;
 
@@ -107,8 +123,11 @@ export default function Visualizer3D({ analyser, isPlaying, accentColor }: Visua
 
                 ctx.beginPath();
                 ctx.globalAlpha = Math.min(1, p.baseAlpha + (bassFactor * 0.5));
-                ctx.arc(p.x, p.y, p.radius * pScale, 0, Math.PI * 2);
-                ctx.fill();
+                const radius = p.radius * pScale;
+                if (!isNaN(radius) && radius > 0) {
+                    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             });
 
             // Draw subtle frequency wave at bottom

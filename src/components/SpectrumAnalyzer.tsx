@@ -6,6 +6,17 @@ interface SpectrumAnalyzerProps {
   analyser: AnalyserNode | null;
 }
 
+const applyOpacity = (color: string, opacity: number): string => {
+  if (color.startsWith('#')) {
+    const alpha = Math.round(opacity * 255).toString(16).padStart(2, '0');
+    return `${color}${alpha}`;
+  }
+  if (color.startsWith('rgb(')) {
+    return color.replace('rgb(', 'rgba(').replace(')', `, ${opacity})`);
+  }
+  return color;
+};
+
 export default function SpectrumAnalyzer({ isPlaying, accentColor, analyser }: SpectrumAnalyzerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -22,9 +33,9 @@ export default function SpectrumAnalyzer({ isPlaying, accentColor, analyser }: S
 
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
+
       const barWidth = (canvas.width / bars) - 1;
-      
+
       if (analyser && isPlaying) {
         analyser.getByteFrequencyData(dataArray);
       }
@@ -40,10 +51,10 @@ export default function SpectrumAnalyzer({ isPlaying, accentColor, analyser }: S
 
         const x = i * (barWidth + 1);
         const y = canvas.height - data[i];
-        
+
         // Gradient for bars
         const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
-        gradient.addColorStop(0, `${accentColor}40`);
+        gradient.addColorStop(0, applyOpacity(accentColor, 0.25));
         gradient.addColorStop(1, accentColor);
 
         ctx.fillStyle = gradient;
@@ -61,10 +72,10 @@ export default function SpectrumAnalyzer({ isPlaying, accentColor, analyser }: S
   }, [isPlaying, accentColor, analyser]);
 
   return (
-    <canvas 
-      ref={canvasRef} 
-      width={300} 
-      height={80} 
+    <canvas
+      ref={canvasRef}
+      width={300}
+      height={80}
       className="w-full h-20 opacity-80"
     />
   );

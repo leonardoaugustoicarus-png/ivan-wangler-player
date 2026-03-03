@@ -263,12 +263,15 @@ export default function App() {
     if (!audioRef.current) return;
     if (audioSource && !isCrossfading) {
       // audioSource change already updates <audio src> via React render.
-      // We need to call load() so the browser picks up the new src,
-      // then play().
+      // We need to call load() so the browser picks up the new src.
       audioRef.current.load();
       initAudioContext();
       if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
-      audioRef.current.play().catch(() => setIsPlaying(false));
+
+      // Only play if we are supposed to be playing
+      if (isPlaying) {
+        audioRef.current.play().catch(() => setIsPlaying(false));
+      }
     } else if (!isCrossfading) {
       audioRef.current.pause();
     }
@@ -608,30 +611,32 @@ export default function App() {
   };
 
   // ─── Crossfade Logic ──────────────────────────────────────────────────────
+  const crossfadeIntervalRef = useRef<any>(null);
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !dspSettings.smartCrossfade || isRepeat) return;
-
-    let crossfadeInterval: any;
 
     const onTimeUpdate = () => {
       const activeQueue = queue.length > 0 ? queue : libraryTracks;
       const nextTrack = activeQueue[currentQueueIndex + 1];
 
-      if (!nextTrack || isCrossfading || audio.duration <= dspSettings.crossfadeDuration) return;
+      if (!nextTrack || isCrossfading || crossfadeIntervalRef.current || audio.duration <= dspSettings.crossfadeDuration) return;
 
       const timeLeft = audio.duration - audio.currentTime;
-      if (timeLeft <= dspSettings.crossfadeDuration) {
+      if (timeLeft <= dspSettings.crossfadeDuration && timeLeft > 0) {
         // Init Crossfade
         setIsCrossfading(true);
 
         // Prepare next track audio
         if (crossfadeAudioRef.current) {
-          const nextFile = nextTrack.file || nextTrack; // handle file vs blobl url if needed
-          const processCrossfadeFile = (f: File) => URL.createObjectURL(f);
-
+          const nextFile = nextTrack.file || nextTrack;
           let nextUrl = '';
-          if (nextFile instanceof File) nextUrl = processCrossfadeFile(nextFile);
+          if (nextFile instanceof File) {
+            nextUrl = URL.createObjectURL(nextFile);
+          } else if (typeof nextFile === 'string') {
+            nextUrl = nextFile;
+          }
 
           if (nextUrl) {
             crossfadeAudioRef.current.src = nextUrl;
@@ -644,7 +649,7 @@ export default function App() {
         const stepTime = (dspSettings.crossfadeDuration * 1000) / steps;
         let currentStep = 0;
 
-        crossfadeInterval = setInterval(() => {
+        crossfadeIntervalRef.current = setInterval(() => {
           currentStep++;
           const progress = currentStep / steps;
 
@@ -656,13 +661,16 @@ export default function App() {
           }
 
           if (currentStep >= steps) {
-            clearInterval(crossfadeInterval);
+            clearInterval(crossfadeIntervalRef.current);
+            crossfadeIntervalRef.current = null;
             handleNextTrack();
             setIsCrossfading(false);
             if (audioRef.current) audioRef.current.volume = volume;
             if (crossfadeAudioRef.current) {
               crossfadeAudioRef.current.pause();
-              URL.revokeObjectURL(crossfadeAudioRef.current.src);
+              if (crossfadeAudioRef.current.src.startsWith('blob:')) {
+                URL.revokeObjectURL(crossfadeAudioRef.current.src);
+              }
               crossfadeAudioRef.current.src = '';
             }
           }
@@ -673,7 +681,10 @@ export default function App() {
     audio.addEventListener('timeupdate', onTimeUpdate);
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
-      if (crossfadeInterval) clearInterval(crossfadeInterval);
+      if (crossfadeIntervalRef.current) {
+        clearInterval(crossfadeIntervalRef.current);
+        crossfadeIntervalRef.current = null;
+      }
     };
   }, [currentQueueIndex, queue, libraryTracks, dspSettings.smartCrossfade, dspSettings.crossfadeDuration, isCrossfading, volume, isRepeat]);
 
