@@ -330,10 +330,11 @@ export default function App() {
       localStorage.setItem('lastPlayedTrackId', file.id.toString());
     }
 
-    const processFile = (fileToProcess: File, trackTitle: string, trackArtist: string) => {
+    const processFile = (fileToProcess: File, trackTitle: string, trackArtist: string, trackId?: number) => {
       const url = URL.createObjectURL(fileToProcess);
       setAudioSource(url);
       const jsmediatags = (window as any).jsmediatags;
+
       if (jsmediatags) {
         jsmediatags.read(fileToProcess, {
           onSuccess: (tag: any) => {
@@ -345,30 +346,37 @@ export default function App() {
               const blob = new Blob([uint8Array], { type: format });
               coverUrl = URL.createObjectURL(blob);
             }
+
             setTrackInfo({
               title: title || trackTitle,
               artist: artist || trackArtist,
               coverUrl: coverUrl,
               lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
             });
+
             if (coverUrl) {
               extractDominantColor(coverUrl).then(setAccentColor);
+              // Save extracted cover back to library if we have a trackId
+              if (trackId) {
+                const track = libraryTracks.find(t => t.id === trackId);
+                if (track) saveTrack({ ...track, coverUrl }).catch(() => { });
+              }
             } else {
               setAccentColor('#EAB308');
-              fetchAICover(title || trackTitle, artist || trackArtist);
+              fetchAICover(title || trackTitle, artist || trackArtist, trackId);
             }
             if (autoEq) fetchAIEQProfile(title || trackTitle, artist || trackArtist);
           },
           onError: (error: any) => {
             console.warn('Error reading tags:', error);
             setTrackInfo({ title: trackTitle, artist: trackArtist, coverUrl: '', lyrics: (file as any).lyrics || '' });
-            fetchAICover(trackTitle, trackArtist);
+            fetchAICover(trackTitle, trackArtist, trackId);
             if (autoEq) fetchAIEQProfile(trackTitle, trackArtist);
           }
         });
       } else {
         setTrackInfo({ title: trackTitle, artist: trackArtist, coverUrl: '', lyrics: (file as any).lyrics || '' });
-        fetchAICover(trackTitle, trackArtist);
+        fetchAICover(trackTitle, trackArtist, trackId);
         if (autoEq) fetchAIEQProfile(trackTitle, trackArtist);
       }
     };
@@ -403,7 +411,7 @@ export default function App() {
       }
     };
 
-    const fetchAICover = async (title: string, artist: string) => {
+    const fetchAICover = async (title: string, artist: string, trackId?: number) => {
       const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
       if (!apiKey) return;
 
@@ -426,6 +434,14 @@ export default function App() {
           coverUrl: dynamicUrl
         }));
         extractDominantColor(dynamicUrl).then(setAccentColor);
+
+        // Persist AI cover back to DB if track exists
+        if (trackId) {
+          const track = libraryTracks.find(t => t.id === trackId);
+          if (track) {
+            saveTrack({ ...track, coverUrl: dynamicUrl }).catch(err => console.warn('Failed to persist AI cover:', err));
+          }
+        }
       } catch (err) {
         console.warn('AI Cover error:', err);
       }
@@ -437,9 +453,22 @@ export default function App() {
       setQueue([newTrack]);
       setCurrentQueueIndex(0);
       setRecentTracks(prev => [newTrack, ...prev.filter(t => t.id !== newTrack.id)].slice(0, 20));
-      // No fetchAICover here, handled by processFile
     } else if (file.isFile && file.file) {
-      processFile(file.file, file.title, file.artist);
+      // If playing from library object that already has metadata
+      if (file.coverUrl) {
+        const url = URL.createObjectURL(file.file);
+        setAudioSource(url);
+        setTrackInfo({
+          title: file.title,
+          artist: file.artist,
+          coverUrl: file.coverUrl,
+          lyrics: file.lyrics || ''
+        });
+        extractDominantColor(file.coverUrl).then(setAccentColor);
+        if (autoEq) fetchAIEQProfile(file.title, file.artist);
+      } else {
+        processFile(file.file, file.title, file.artist, file.id);
+      }
 
       let idx = queue.findIndex(t => t.id === file.id);
       if (idx === -1) {
@@ -452,7 +481,6 @@ export default function App() {
         setCurrentQueueIndex(idx);
       }
       setRecentTracks(prev => [file, ...prev.filter(t => t.id !== file.id)].slice(0, 20));
-      // No fetchAICover here, handled by processFile
     } else {
       setAudioSource(null);
       setTrackInfo({ title: file.title, artist: file.artist, coverUrl: file.coverUrl || '', lyrics: file.lyrics || '' });
@@ -460,7 +488,7 @@ export default function App() {
         extractDominantColor(file.coverUrl).then(setAccentColor);
       } else {
         setAccentColor('#EAB308');
-        fetchAICover(file.title, file.artist);
+        fetchAICover(file.title, file.artist, file.id);
       }
       setCurrentQueueIndex(queue.findIndex(t => t.id === file.id));
       setRecentTracks(prev => [file, ...prev.filter(t => t.id !== file.id)].slice(0, 20));
@@ -498,23 +526,58 @@ export default function App() {
       }
     }
 
-    const newTracks: any[] = audioFiles.map(file => {
-      // In a real mobile environment, we might get webkitRelativePath if the user uploads a folder
+    const jsmediatags = (window as any).jsmediatags;
+
+    const extractMetadata = (file: File): Promise<{ title: string, artist: string, coverUrl: string }> => {
+      return new Promise((resolve) => {
+        const baseName = file.name.replace(/\.[^/.]+$/, '');
+        if (!jsmediatags) {
+          resolve({ title: baseName, artist: 'Local File', coverUrl: '' });
+          return;
+        }
+
+        jsmediatags.read(file, {
+          onSuccess: (tag: any) => {
+            const { title, artist, picture } = tag.tags;
+            let coverUrl = '';
+            if (picture) {
+              const { data, format } = picture;
+              const uint8Array = new Uint8Array(data);
+              const blob = new Blob([uint8Array], { type: format });
+              coverUrl = URL.createObjectURL(blob);
+            }
+            resolve({
+              title: title || baseName,
+              artist: artist || 'Local File',
+              coverUrl: coverUrl
+            });
+          },
+          onError: () => {
+            resolve({ title: baseName, artist: 'Local File', coverUrl: '' });
+          }
+        });
+      });
+    };
+
+    const newTracks: any[] = [];
+    for (const file of audioFiles) {
+      const metadata = await extractMetadata(file);
       const path = (file as any).webkitRelativePath || '';
       const folderName = path.split('/')[0] || 'Biblioteca';
-      const baseName = file.name.replace(/\.[^/.]+$/, '');
 
-      return {
+      const track = {
         id: Math.random() + Date.now(),
-        title: baseName,
-        artist: 'Local File',
+        title: metadata.title,
+        artist: metadata.artist,
         isFile: true,
         file,
         format: file.name.split('.').pop()?.toUpperCase(),
         folder: folderName,
-        lyrics: lrcMap.get(baseName) || ''
+        lyrics: lrcMap.get(metadata.title) || lrcMap.get(file.name.replace(/\.[^/.]+$/, '')) || '',
+        coverUrl: metadata.coverUrl
       };
-    });
+      newTracks.push(track);
+    }
 
     setLibraryTracks(prev => [...prev, ...newTracks]);
 
