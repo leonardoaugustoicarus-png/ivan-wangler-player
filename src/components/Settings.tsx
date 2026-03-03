@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { Palette, Trash2, ShieldCheck, ChevronRight, Laptop, Folder } from 'lucide-react';
-import { clearAllTracks } from '../utils/db';
+import { Palette, Trash2, ShieldCheck, ChevronRight, Laptop, Folder, Share2, Download, Upload, Loader2 } from 'lucide-react';
+import { clearAllTracks, exportLibraryData, importLibraryData } from '../utils/db';
 
 interface SettingsProps {
     accentColor: string;
@@ -18,6 +18,9 @@ const PRESET_COLORS = [
 
 export default function Settings({ accentColor, setAccentColor }: SettingsProps) {
     const [storageInfo, setStorageInfo] = useState({ used: 0, total: 0 });
+    const [isExporting, setIsExporting] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (navigator.storage && navigator.storage.estimate) {
@@ -28,7 +31,7 @@ export default function Settings({ accentColor, setAccentColor }: SettingsProps)
                 });
             });
         }
-    }, []);
+    }, [isImporting]);
 
     const handleClearLibrary = async () => {
         if (confirm('Tem certeza que deseja apagar toda a biblioteca permanentemente?')) {
@@ -37,11 +40,62 @@ export default function Settings({ accentColor, setAccentColor }: SettingsProps)
         }
     };
 
+    const handleExport = async () => {
+        try {
+            setIsExporting(true);
+            const jsonData = await exportLibraryData();
+            const blob = new Blob([jsonData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ivan-wangler-backup-${new Date().toISOString().split('T')[0]}.aura`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            alert('Falha ao exportar biblioteca. O arquivo pode ser muito grande para o navegador.');
+            console.error(err);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            setIsImporting(true);
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const content = event.target?.result as string;
+                    await importLibraryData(content);
+                    alert('Biblioteca importada com sucesso! O aplicativo será reiniciado.');
+                    window.location.reload();
+                } catch (err) {
+                    alert('Erro ao processar o arquivo de backup.');
+                }
+            };
+            reader.readAsText(file);
+        } catch (err) {
+            alert('Falha ao importar biblioteca.');
+            console.error(err);
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
     return (
         <div className="flex flex-col h-full px-8 pt-4 pb-12 overflow-y-auto no-scrollbar bg-black/40 backdrop-blur-3xl">
             <div className="mb-10 text-center">
                 <h2 className="text-3xl font-display font-bold tracking-tight text-white/90">Aura Settings</h2>
-                <p className="text-[10px] uppercase tracking-[0.3em] text-accent font-bold mt-2">Versão 1.0.0 Pro</p>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-accent font-bold mt-2">Versão 1.1.0 Pro</p>
             </div>
 
             <div className="space-y-8">
@@ -68,6 +122,56 @@ export default function Settings({ accentColor, setAccentColor }: SettingsProps)
                                 ))}
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                {/* Sincronização Section */}
+                <section>
+                    <div className="flex items-center space-x-3 mb-4">
+                        <Share2 size={18} className="text-accent" />
+                        <h3 className="text-[10px] uppercase tracking-[0.2em] font-display font-bold text-white/40">Sincronização & Backup</h3>
+                    </div>
+                    <div className="glass-card rounded-[32px] overflow-hidden border-white/5 divide-y divide-white/5">
+                        <button
+                            onClick={handleExport}
+                            disabled={isExporting}
+                            className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-all group disabled:opacity-50"
+                        >
+                            <div className="flex items-center space-x-4">
+                                <div className="p-2.5 rounded-2xl bg-accent/10 text-accent group-hover:scale-110 transition-transform">
+                                    {isExporting ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-xs font-bold text-white/90">Exportar Biblioteca</p>
+                                    <p className="text-[9px] text-white/30">Cria um arquivo .aura com músicas e capas</p>
+                                </div>
+                            </div>
+                            <ChevronRight size={16} className="text-white/10 group-hover:text-accent" />
+                        </button>
+
+                        <button
+                            onClick={handleImportClick}
+                            disabled={isImporting}
+                            className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-all group disabled:opacity-50"
+                        >
+                            <div className="flex items-center space-x-4">
+                                <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-500 group-hover:scale-110 transition-transform">
+                                    {isImporting ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-xs font-bold text-white/90">Importar Biblioteca</p>
+                                    <p className="text-[9px] text-white/30">Restaura músicas de um arquivo .aura</p>
+                                </div>
+                            </div>
+                            <ChevronRight size={16} className="text-white/10 group-hover:text-emerald-500" />
+                        </button>
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            accept=".aura,.json"
+                            className="hidden"
+                        />
                     </div>
                 </section>
 
