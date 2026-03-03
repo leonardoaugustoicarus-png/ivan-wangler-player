@@ -349,15 +349,20 @@ export default function App() {
               title: title || trackTitle,
               artist: artist || trackArtist,
               coverUrl: coverUrl,
-              lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || '' // default empty if local, wait for state map
+              lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
             });
-            if (coverUrl) extractDominantColor(coverUrl).then(setAccentColor);
-            else setAccentColor('#EAB308');
+            if (coverUrl) {
+              extractDominantColor(coverUrl).then(setAccentColor);
+            } else {
+              setAccentColor('#EAB308');
+              fetchAICover(title || trackTitle, artist || trackArtist);
+            }
             if (autoEq) fetchAIEQProfile(title || trackTitle, artist || trackArtist);
           },
           onError: (error: any) => {
             console.warn('Error reading tags:', error);
             setTrackInfo({ title: trackTitle, artist: trackArtist, coverUrl: '', lyrics: (file as any).lyrics || '' });
+            fetchAICover(trackTitle, trackArtist);
             if (autoEq) fetchAIEQProfile(trackTitle, trackArtist);
           }
         });
@@ -386,7 +391,6 @@ export default function App() {
         const data = await response.json();
         const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
 
-        // Extract array from response even if there's markdown formatting
         const match = textResponse.match(/\[(.*?)\]/);
         if (match) {
           const arr = JSON.parse(`[${match[1]}]`);
@@ -415,7 +419,6 @@ export default function App() {
         });
         const data = await response.json();
         const query = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || `${title} ${artist}`;
-        // Using LoremFlickr for stable, tag-based music imagery
         const dynamicUrl = `https://loremflickr.com/800/800/music,album,${encodeURIComponent(query.replace(/\s+/g, ','))}/all`;
 
         setTrackInfo(prev => ({
@@ -430,18 +433,16 @@ export default function App() {
 
     if (file instanceof File) {
       processFile(file, file.name.replace(/\.[^/.]+$/, ''), 'Local File');
-      // If we just played a single file, make sure it's in a temporary queue context or similar
       const newTrack = { id: Date.now(), title: file.name.replace(/\.[^/.]+$/, ''), artist: 'Local File', isFile: true, file };
       setQueue([newTrack]);
       setCurrentQueueIndex(0);
       setRecentTracks(prev => [newTrack, ...prev.filter(t => t.id !== newTrack.id)].slice(0, 20));
-      fetchAICover(newTrack.title, newTrack.artist);
+      // No fetchAICover here, handled by processFile
     } else if (file.isFile && file.file) {
       processFile(file.file, file.title, file.artist);
 
       let idx = queue.findIndex(t => t.id === file.id);
       if (idx === -1) {
-        // If playing from library and not in queue, sync library to queue
         const libIdx = libraryTracks.findIndex(t => t.id === file.id);
         if (libIdx !== -1) {
           setQueue([...libraryTracks]);
@@ -451,14 +452,18 @@ export default function App() {
         setCurrentQueueIndex(idx);
       }
       setRecentTracks(prev => [file, ...prev.filter(t => t.id !== file.id)].slice(0, 20));
-      if (!file.coverUrl) fetchAICover(file.title, file.artist);
+      // No fetchAICover here, handled by processFile
     } else {
       setAudioSource(null);
-      setTrackInfo({ title: file.title, artist: file.artist, coverUrl: '', lyrics: file.lyrics || '' });
-      setAccentColor('#EAB308');
+      setTrackInfo({ title: file.title, artist: file.artist, coverUrl: file.coverUrl || '', lyrics: file.lyrics || '' });
+      if (file.coverUrl) {
+        extractDominantColor(file.coverUrl).then(setAccentColor);
+      } else {
+        setAccentColor('#EAB308');
+        fetchAICover(file.title, file.artist);
+      }
       setCurrentQueueIndex(queue.findIndex(t => t.id === file.id));
       setRecentTracks(prev => [file, ...prev.filter(t => t.id !== file.id)].slice(0, 20));
-      fetchAICover(file.title, file.artist);
       if (autoEq) fetchAIEQProfile(file.title, file.artist);
     }
 
