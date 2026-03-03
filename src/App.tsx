@@ -320,10 +320,8 @@ export default function App() {
   };
 
   const handleSelectTrack = (file: File | any, shouldPlay: boolean = true) => {
+    // Revoke old source but keep covers (base64 doesn't need revocation)
     if (audioSource) URL.revokeObjectURL(audioSource);
-    if (trackInfo.coverUrl && trackInfo.coverUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(trackInfo.coverUrl);
-    }
 
     // Save playing track to local storage
     if (file && file.id) {
@@ -344,24 +342,30 @@ export default function App() {
               const { data, format } = picture;
               const uint8Array = new Uint8Array(data);
               const blob = new Blob([uint8Array], { type: format });
-              coverUrl = URL.createObjectURL(blob);
-            }
 
-            setTrackInfo({
-              title: title || trackTitle,
-              artist: artist || trackArtist,
-              coverUrl: coverUrl,
-              lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
-            });
-
-            if (coverUrl) {
-              extractDominantColor(coverUrl).then(setAccentColor);
-              // Save extracted cover back to library if we have a trackId
-              if (trackId) {
-                const track = libraryTracks.find(t => t.id === trackId);
-                if (track) saveTrack({ ...track, coverUrl }).catch(() => { });
-              }
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const coverUrl = reader.result as string;
+                setTrackInfo({
+                  title: title || trackTitle,
+                  artist: artist || trackArtist,
+                  coverUrl: coverUrl,
+                  lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
+                });
+                extractDominantColor(coverUrl).then(setAccentColor);
+                if (trackId) {
+                  const track = libraryTracks.find(t => t.id === trackId);
+                  if (track) saveTrack({ ...track, coverUrl }).catch(() => { });
+                }
+              };
+              reader.readAsDataURL(blob);
             } else {
+              setTrackInfo({
+                title: title || trackTitle,
+                artist: artist || trackArtist,
+                coverUrl: '',
+                lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
+              });
               setAccentColor('#EAB308');
               fetchAICover(title || trackTitle, artist || trackArtist, trackId);
             }
@@ -544,13 +548,25 @@ export default function App() {
               const { data, format } = picture;
               const uint8Array = new Uint8Array(data);
               const blob = new Blob([uint8Array], { type: format });
-              coverUrl = URL.createObjectURL(blob);
+
+              // Convert Blob to Data URL for persistence
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                resolve({
+                  title: title || baseName,
+                  artist: artist || 'Local File',
+                  coverUrl: reader.result as string
+                });
+              };
+              reader.onerror = () => resolve({ title: baseName, artist: 'Local File', coverUrl: '' });
+              reader.readAsDataURL(blob);
+            } else {
+              resolve({
+                title: title || baseName,
+                artist: artist || 'Local File',
+                coverUrl: ''
+              });
             }
-            resolve({
-              title: title || baseName,
-              artist: artist || 'Local File',
-              coverUrl: coverUrl
-            });
           },
           onError: () => {
             resolve({ title: baseName, artist: 'Local File', coverUrl: '' });
