@@ -14,7 +14,8 @@ export interface PersistedTrack {
     format?: string;
     folder?: string;
     file: File | Blob;
-    coverUrl?: string;
+    coverUrl?: string; // Still used for temporary blob URLs or AI URLs
+    coverBlob?: Blob | null; // Permanent storage for extracted covers
     lyrics?: string;
 }
 

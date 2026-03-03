@@ -197,23 +197,35 @@ export default function App() {
       try {
         const storedTracks = await getAllTracks();
         if (storedTracks.length > 0) {
-          setLibraryTracks(storedTracks);
+          // Generate temporary blob URLs for persisted coverBlobs
+          const enrichedTracks = storedTracks.map(t => ({
+            ...t,
+            coverUrl: t.coverBlob ? URL.createObjectURL(t.coverBlob) : (t.coverUrl && !t.coverUrl.startsWith('blob:') ? t.coverUrl : '')
+          }));
+          setLibraryTracks(enrichedTracks);
 
-          // Check for last played track
           const lastPlayedId = localStorage.getItem('lastPlayedTrackId');
           if (lastPlayedId) {
-            const track = storedTracks.find(t => t.id === Number(lastPlayedId));
-            if (track) {
-              // Initial load without autoplay
-              handleSelectTrack(track, false);
-            }
+            const lastTrack = enrichedTracks.find(t => t.id.toString() === lastPlayedId);
+            if (lastTrack) handleSelectTrack(lastTrack, false);
           }
         }
       } catch (err) {
-        console.error('Failed to load library:', err);
+        console.warn('Failed to load library:', err);
       }
     };
     loadLibrary();
+
+    return () => {
+      // Basic cleanup of blob URLs if necessary (complex since libraryTracks is state)
+      // This cleanup is tricky because libraryTracks is state and might not reflect the
+      // URLs created in this specific effect run if the component re-renders.
+      // A more robust solution would involve tracking created URLs in a ref or global store.
+      // For now, we'll assume the browser's garbage collection handles unused blob URLs
+      // when the component unmounts or new URLs are created for the same track.
+      // However, if a track is removed from the library, its coverUrl blob might persist.
+      // A more explicit cleanup would be needed in the deleteTrack handler.
+    };
   }, []);
 
   const handleInstallClick = async () => {
@@ -341,24 +353,20 @@ export default function App() {
             if (picture) {
               const { data, format } = picture;
               const uint8Array = new Uint8Array(data);
-              const blob = new Blob([uint8Array], { type: format });
+              const coverBlob = new Blob([uint8Array], { type: format });
+              const coverUrl = URL.createObjectURL(coverBlob);
 
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                const coverUrl = reader.result as string;
-                setTrackInfo({
-                  title: title || trackTitle,
-                  artist: artist || trackArtist,
-                  coverUrl: coverUrl,
-                  lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
-                });
-                extractDominantColor(coverUrl).then(setAccentColor);
-                if (trackId) {
-                  const track = libraryTracks.find(t => t.id === trackId);
-                  if (track) saveTrack({ ...track, coverUrl }).catch(() => { });
-                }
-              };
-              reader.readAsDataURL(blob);
+              setTrackInfo({
+                title: title || trackTitle,
+                artist: artist || trackArtist,
+                coverUrl: coverUrl,
+                lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
+              });
+              extractDominantColor(coverUrl).then(setAccentColor);
+              if (trackId) {
+                const track = libraryTracks.find(t => t.id === trackId);
+                if (track) saveTrack({ ...track, coverBlob, coverUrl }).catch(() => { });
+              }
             } else {
               setTrackInfo({
                 title: title || trackTitle,
@@ -433,17 +441,22 @@ export default function App() {
         const query = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || `${title} ${artist}`;
         const dynamicUrl = `https://loremflickr.com/800/800/music,album,${encodeURIComponent(query.replace(/\s+/g, ','))}/all`;
 
+        // Fetch image as Blob for persistence
+        const imgResp = await fetch(dynamicUrl);
+        const coverBlob = await imgResp.blob();
+        const coverUrl = URL.createObjectURL(coverBlob);
+
         setTrackInfo(prev => ({
           ...prev,
-          coverUrl: dynamicUrl
+          coverUrl: coverUrl
         }));
-        extractDominantColor(dynamicUrl).then(setAccentColor);
+        extractDominantColor(coverUrl).then(setAccentColor);
 
         // Persist AI cover back to DB if track exists
         if (trackId) {
           const track = libraryTracks.find(t => t.id === trackId);
           if (track) {
-            saveTrack({ ...track, coverUrl: dynamicUrl }).catch(err => console.warn('Failed to persist AI cover:', err));
+            saveTrack({ ...track, coverBlob, coverUrl }).catch(err => console.warn('Failed to persist AI cover:', err));
           }
         }
       } catch (err) {
@@ -532,44 +545,31 @@ export default function App() {
 
     const jsmediatags = (window as any).jsmediatags;
 
-    const extractMetadata = (file: File): Promise<{ title: string, artist: string, coverUrl: string }> => {
+    const extractMetadata = (file: File): Promise<{ title: string, artist: string, coverBlob: Blob | null }> => {
       return new Promise((resolve) => {
         const baseName = file.name.replace(/\.[^/.]+$/, '');
         if (!jsmediatags) {
-          resolve({ title: baseName, artist: 'Local File', coverUrl: '' });
+          resolve({ title: baseName, artist: 'Local File', coverBlob: null });
           return;
         }
 
         jsmediatags.read(file, {
           onSuccess: (tag: any) => {
             const { title, artist, picture } = tag.tags;
-            let coverUrl = '';
+            let coverBlob: Blob | null = null;
             if (picture) {
               const { data, format } = picture;
               const uint8Array = new Uint8Array(data);
-              const blob = new Blob([uint8Array], { type: format });
-
-              // Convert Blob to Data URL for persistence
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                resolve({
-                  title: title || baseName,
-                  artist: artist || 'Local File',
-                  coverUrl: reader.result as string
-                });
-              };
-              reader.onerror = () => resolve({ title: baseName, artist: 'Local File', coverUrl: '' });
-              reader.readAsDataURL(blob);
-            } else {
-              resolve({
-                title: title || baseName,
-                artist: artist || 'Local File',
-                coverUrl: ''
-              });
+              coverBlob = new Blob([uint8Array], { type: format });
             }
+            resolve({
+              title: title || baseName,
+              artist: artist || 'Local File',
+              coverBlob: coverBlob
+            });
           },
           onError: () => {
-            resolve({ title: baseName, artist: 'Local File', coverUrl: '' });
+            resolve({ title: baseName, artist: 'Local File', coverBlob: null });
           }
         });
       });
@@ -590,7 +590,8 @@ export default function App() {
         format: file.name.split('.').pop()?.toUpperCase(),
         folder: folderName,
         lyrics: lrcMap.get(metadata.title) || lrcMap.get(file.name.replace(/\.[^/.]+$/, '')) || '',
-        coverUrl: metadata.coverUrl
+        coverBlob: metadata.coverBlob,
+        coverUrl: metadata.coverBlob ? URL.createObjectURL(metadata.coverBlob) : ''
       };
       newTracks.push(track);
     }
