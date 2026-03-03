@@ -98,6 +98,8 @@ export default function App() {
   const [recentTracks, setRecentTracks] = useState<any[]>([]);
   const [currentQueueIndex, setCurrentQueueIndex] = useState(-1);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isHealing, setIsHealing] = useState(false);
+  const [healingProgress, setHealingProgress] = useState({ current: 0, total: 0 });
 
   // EQ & DSP State
   const [eqGains, setEqGains] = useState<number[]>(new Array(15).fill(0));
@@ -192,22 +194,64 @@ export default function App() {
   }, []);
 
   // Load tracks from IndexedDB and auto-select last played
+  const healLibrary = async (tracks: any[]) => {
+    if (isHealing || tracks.length === 0) return;
+    setIsHealing(true);
+    setHealingProgress({ current: 0, total: tracks.length });
+    const jsmediatags = (window as any).jsmediatags;
+    if (!jsmediatags) {
+      setIsHealing(false);
+      return;
+    }
+
+    for (let i = 0; i < tracks.length; i++) {
+      const t = tracks[i];
+      try {
+        if (t.file && t.file instanceof Blob) {
+          await new Promise((resolve) => {
+            jsmediatags.read(t.file, {
+              onSuccess: (tag: any) => {
+                const { picture } = tag.tags;
+                if (picture) {
+                  const { data, format } = picture;
+                  const uint8Array = new Uint8Array(data);
+                  const coverBlob = new Blob([uint8Array], { type: format });
+                  saveTrack({ ...t, coverBlob }).catch(() => { });
+                  setLibraryTracks(prev => prev.map(lt => lt.id === t.id ? { ...lt, coverBlob } : lt));
+                }
+                resolve(null);
+              },
+              onError: () => resolve(null)
+            });
+          });
+        }
+      } catch (e) {
+        console.warn('Healing error:', e);
+      }
+      setHealingProgress(prev => ({ ...prev, current: i + 1 }));
+      if (i % 3 === 0) await new Promise(r => setTimeout(r, 100));
+    }
+    setIsHealing(false);
+  };
+
+  // Load tracks from IndexedDB and auto-select last played
   useEffect(() => {
     const loadLibrary = async () => {
       try {
         const storedTracks = await getAllTracks();
         if (storedTracks.length > 0) {
-          // Generate temporary blob URLs for persisted coverBlobs
-          const enrichedTracks = storedTracks.map(t => ({
-            ...t,
-            coverUrl: t.coverBlob ? URL.createObjectURL(t.coverBlob) : (t.coverUrl && !t.coverUrl.startsWith('blob:') ? t.coverUrl : '')
-          }));
-          setLibraryTracks(enrichedTracks);
+          setLibraryTracks(storedTracks);
 
           const lastPlayedId = localStorage.getItem('lastPlayedTrackId');
           if (lastPlayedId) {
-            const lastTrack = enrichedTracks.find(t => t.id.toString() === lastPlayedId);
+            const lastTrack = storedTracks.find(t => t.id.toString() === lastPlayedId);
             if (lastTrack) handleSelectTrack(lastTrack, false);
+          }
+
+          // Trigger healing for missing covers
+          const toHeal = storedTracks.filter(t => !t.coverBlob && t.file);
+          if (toHeal.length > 0) {
+            healLibrary(toHeal);
           }
         }
       } catch (err) {
@@ -215,17 +259,6 @@ export default function App() {
       }
     };
     loadLibrary();
-
-    return () => {
-      // Basic cleanup of blob URLs if necessary (complex since libraryTracks is state)
-      // This cleanup is tricky because libraryTracks is state and might not reflect the
-      // URLs created in this specific effect run if the component re-renders.
-      // A more robust solution would involve tracking created URLs in a ref or global store.
-      // For now, we'll assume the browser's garbage collection handles unused blob URLs
-      // when the component unmounts or new URLs are created for the same track.
-      // However, if a track is removed from the library, its coverUrl blob might persist.
-      // A more explicit cleanup would be needed in the deleteTrack handler.
-    };
   }, []);
 
   const handleInstallClick = async () => {
@@ -802,9 +835,40 @@ export default function App() {
 
   return (
     <div
-      className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-8 relative bg-midnight"
+      className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-8 relative bg-midnight overflow-hidden"
       style={{ '--accent-color': accentColor } as React.CSSProperties}
     >
+      {/* Healing Progress Indicator */}
+      <AnimatePresence>
+        {isHealing && (
+          <motion.div
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 20, opacity: 1 }}
+            exit={{ y: -20, opacity: 0 }}
+            className="fixed top-0 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[280px] px-4 pointer-events-none"
+          >
+            <div className="glass-card rounded-2xl p-3 border border-accent/20 flex items-center space-x-3 shadow-2xl backdrop-blur-xl">
+              <div className="w-8 h-8 rounded-xl bg-accent/20 flex items-center justify-center text-accent">
+                <Zap size={16} className="animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-end mb-1">
+                  <p className="text-[9px] font-bold text-white tracking-wider uppercase">Restaurando Capas</p>
+                  <p className="text-[9px] font-mono text-accent">{Math.round((healingProgress.current / healingProgress.total) * 100)}%</p>
+                </div>
+                <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-accent shadow-[0_0_10px_rgba(234,179,8,0.4)]"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(healingProgress.current / healingProgress.total) * 100}%` }}
+                    transition={{ type: 'spring', bounce: 0, duration: 0.5 }}
+                  />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Persistent hidden audio element — NEVER conditionally rendered */}
       <audio
         ref={audioRef}
