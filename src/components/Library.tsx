@@ -91,140 +91,173 @@ export default function Library({
     return Array.from(map.entries());
   }, [tracks]);
 
-  const renderTrackItem = (track: Track, i: number) => (
-    <motion.div
-      key={track.id}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: i * 0.05 }}
-      className={`group relative flex items-center p-3 rounded-3xl transition-all cursor-pointer border ${currentTrackId === track.id ? 'bg-accent/15 border-accent/30 shadow-lg' : 'hover:bg-white/5 border-transparent hover:border-white/5'}`}
-    >
-      <div
-        onClick={() => onSelectTrack(track)}
-        className="relative w-14 h-14 rounded-2xl overflow-hidden mr-4 shadow-xl flex-shrink-0 bg-white/5 flex items-center justify-center border border-white/5"
+  const TrackItem = React.memo(({
+    track,
+    index,
+    currentTrackId,
+    openMenuId,
+    onSelectTrack,
+    onPlayNext,
+    onAddToQueue,
+    onRemoveTrack,
+    setOpenMenuId,
+    setRenameModalOpen,
+    setNewTrackName,
+    setTargetCoverId,
+    coverInputRef,
+    setActiveTab,
+    setSelectedFolder
+  }: {
+    track: Track;
+    index: number;
+    currentTrackId?: number;
+    openMenuId: number | null;
+    onSelectTrack: (track: Track) => void;
+    onPlayNext: (track: Track) => void;
+    onAddToQueue: (track: Track) => void;
+    onRemoveTrack: (id: number) => void;
+    setOpenMenuId: (id: number | null) => void;
+    setRenameModalOpen: (id: number | null) => void;
+    setNewTrackName: (name: string) => void;
+    setTargetCoverId: (id: number | null) => void;
+    coverInputRef: React.RefObject<HTMLInputElement>;
+    setActiveTab: (tab: TabType) => void;
+    setSelectedFolder: (folder: string | null) => void;
+  }) => {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: Math.min(index * 0.05, 1) }}
+        className={`group relative flex items-center p-3 rounded-3xl transition-all cursor-pointer border ${currentTrackId === track.id ? 'bg-accent/15 border-accent/30 shadow-lg' : 'hover:bg-white/5 border-transparent hover:border-white/5'}`}
       >
-        <CoverImage
-          blob={track.coverBlob}
-          url={track.coverUrl}
-          className="w-full h-full"
-        />
-        <div className={`absolute inset-0 flex items-center justify-center transition-opacity ${currentTrackId === track.id ? 'opacity-100 bg-accent/20' : 'opacity-0 group-hover:opacity-100 bg-black/40'}`}>
-          <PlayCircle size={24} className="text-white drop-shadow-lg" />
-        </div>
-      </div>
-
-      <div
-        onClick={() => onSelectTrack(track)}
-        className="flex-1 min-w-0"
-      >
-        <h4 className={`text-sm font-display font-bold truncate transition-colors ${currentTrackId === track.id ? 'text-accent' : 'text-white/90 group-hover:text-white'}`}>{track.title}</h4>
-        <div className="flex items-center space-x-2 mt-0.5">
-          <span className="text-[10px] text-white/40 truncate font-medium">{track.artist}</span>
-          {track.format && (
-            <span className="text-[8px] px-2 py-0.5 rounded-lg bg-white/10 border border-white/10 text-white/30 font-mono font-bold">{track.format}</span>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center space-x-2 ml-4">
-        <button
-          onClick={(e) => { e.stopPropagation(); onPlayNext(track); }}
-          className="p-2 rounded-xl bg-white/5 text-white/40 hover:text-accent sm:opacity-0 sm:group-hover:opacity-100 transition-all shadow-lg"
-          title="Tocar próxima"
+        <div
+          onClick={() => onSelectTrack(track)}
+          className="relative w-14 h-14 rounded-2xl overflow-hidden mr-4 shadow-xl flex-shrink-0 bg-white/5 flex items-center justify-center border border-white/5"
         >
-          <Music2 size={16} />
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onRemoveTrack(track.id); }}
-          className="p-2 rounded-xl bg-white/5 text-white/40 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 transition-all shadow-lg"
-          title="Remover da biblioteca"
+          <CoverImage
+            blob={track.coverBlob}
+            url={track.coverUrl}
+            className="w-full h-full"
+          />
+          <div className={`absolute inset-0 flex items-center justify-center transition-opacity ${currentTrackId === track.id ? 'opacity-100 bg-accent/20' : 'opacity-0 group-hover:opacity-100 bg-black/40'}`}>
+            <PlayCircle size={24} className="text-white drop-shadow-lg" />
+          </div>
+        </div>
+
+        <div
+          onClick={() => onSelectTrack(track)}
+          className="flex-1 min-w-0"
         >
-          <Trash2 size={16} />
-        </button>
-        <div className="relative">
+          <h4 className={`text-sm font-display font-bold truncate transition-colors ${currentTrackId === track.id ? 'text-accent' : 'text-white/90 group-hover:text-white'}`}>{track.title}</h4>
+          <div className="flex items-center space-x-2 mt-0.5">
+            <span className="text-[10px] text-white/40 truncate font-medium">{track.artist}</span>
+            {track.format && (
+              <span className="text-[8px] px-2 py-0.5 rounded-lg bg-white/10 border border-white/10 text-white/30 font-mono font-bold">{track.format}</span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2 ml-4">
           <button
-            onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === track.id ? null : track.id); }}
-            className={`p-2 transition-colors ${openMenuId === track.id ? 'text-accent bg-white/10 rounded-xl' : 'text-white/20 hover:text-white'}`}
+            onClick={(e) => { e.stopPropagation(); onPlayNext(track); }}
+            className="p-2 rounded-xl bg-white/5 text-white/40 hover:text-accent sm:opacity-0 sm:group-hover:opacity-100 transition-all shadow-lg"
+            title="Tocar próxima"
           >
-            <MoreVertical size={16} />
+            <Music2 size={16} />
           </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onRemoveTrack(track.id); }}
+            className="p-2 rounded-xl bg-white/5 text-white/40 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 transition-all shadow-lg"
+            title="Remover da biblioteca"
+          >
+            <Trash2 size={16} />
+          </button>
+          <div className="relative">
+            <button
+              onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === track.id ? null : track.id); }}
+              className={`p-2 transition-colors ${openMenuId === track.id ? 'text-accent bg-white/10 rounded-xl' : 'text-white/20 hover:text-white'}`}
+            >
+              <MoreVertical size={16} />
+            </button>
 
-          <AnimatePresence>
-            {openMenuId === track.id && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-48 bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex flex-col py-1">
-                  <button
-                    onClick={() => { onPlayNext(track); setOpenMenuId(null); }}
-                    className="flex items-center space-x-3 px-4 py-3 hover:bg-white/5 text-sm text-white/80 hover:text-white transition-colors text-left"
-                  >
-                    <PlayCircle size={16} className="text-white/40" />
-                    <span>Reproduzir depois</span>
-                  </button>
-                  <button
-                    onClick={() => { onAddToQueue(track); setOpenMenuId(null); }}
-                    className="flex items-center space-x-3 px-4 py-3 hover:bg-white/5 text-sm text-white/80 hover:text-white transition-colors text-left"
-                  >
-                    <ListPlus size={16} className="text-white/40" />
-                    <span>Adicionar na fila</span>
-                  </button>
-                  {(track as any).folder && (
+            <AnimatePresence mode="wait">
+              {openMenuId === track.id && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 top-full mt-2 w-48 bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex flex-col py-1">
+                    <button
+                      onClick={() => { onPlayNext(track); setOpenMenuId(null); }}
+                      className="flex items-center space-x-3 px-4 py-3 hover:bg-white/5 text-sm text-white/80 hover:text-white transition-colors text-left"
+                    >
+                      <PlayCircle size={16} className="text-white/40" />
+                      <span>Reproduzir depois</span>
+                    </button>
+                    <button
+                      onClick={() => { onAddToQueue(track); setOpenMenuId(null); }}
+                      className="flex items-center space-x-3 px-4 py-3 hover:bg-white/5 text-sm text-white/80 hover:text-white transition-colors text-left"
+                    >
+                      <ListPlus size={16} className="text-white/40" />
+                      <span>Adicionar na fila</span>
+                    </button>
+                    {(track as any).folder && (
+                      <button
+                        onClick={() => {
+                          setActiveTab('Pastas');
+                          setSelectedFolder((track as any).folder);
+                          setOpenMenuId(null);
+                        }}
+                        className="flex items-center space-x-3 px-4 py-3 hover:bg-white/5 text-sm text-white/80 hover:text-white transition-colors text-left"
+                      >
+                        <Disc3 size={16} className="text-white/40" />
+                        <span>Acessar álbum</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => {
-                        setActiveTab('Pastas');
-                        setSelectedFolder((track as any).folder);
+                        setTargetCoverId(track.id);
+                        coverInputRef.current?.click();
                         setOpenMenuId(null);
                       }}
                       className="flex items-center space-x-3 px-4 py-3 hover:bg-white/5 text-sm text-white/80 hover:text-white transition-colors text-left"
                     >
                       <Disc3 size={16} className="text-white/40" />
-                      <span>Acessar álbum</span>
+                      <span>Alterar capa</span>
                     </button>
-                  )}
-                  <button
-                    onClick={() => {
-                      setTargetCoverId(track.id);
-                      coverInputRef.current?.click();
-                      setOpenMenuId(null);
-                    }}
-                    className="flex items-center space-x-3 px-4 py-3 hover:bg-white/5 text-sm text-white/80 hover:text-white transition-colors text-left"
-                  >
-                    <Disc3 size={16} className="text-white/40" />
-                    <span>Alterar capa</span>
-                  </button>
-                  <div className="h-px bg-white/10 mx-2 my-1" />
-                  <button
-                    onClick={() => {
-                      setRenameModalOpen(track.id);
-                      setNewTrackName(track.title);
-                      setOpenMenuId(null);
-                    }}
-                    className="flex items-center space-x-3 px-4 py-3 hover:bg-white/5 text-sm text-white/80 hover:text-white transition-colors text-left"
-                  >
-                    <Pencil size={16} className="text-white/40" />
-                    <span>Renomear música</span>
-                  </button>
-                  <button
-                    onClick={() => { onRemoveTrack(track.id); setOpenMenuId(null); }}
-                    className="flex items-center space-x-3 px-4 py-3 hover:bg-red-500/10 text-sm text-red-400 hover:text-red-300 transition-colors text-left"
-                  >
-                    <Trash2 size={16} className="text-red-400/60" />
-                    <span>Excluir da biblioteca</span>
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                    <div className="h-px bg-white/10 mx-2 my-1" />
+                    <button
+                      onClick={() => {
+                        setRenameModalOpen(track.id);
+                        setNewTrackName(track.title);
+                        setOpenMenuId(null);
+                      }}
+                      className="flex items-center space-x-3 px-4 py-3 hover:bg-white/5 text-sm text-white/80 hover:text-white transition-colors text-left"
+                    >
+                      <Pencil size={16} className="text-white/40" />
+                      <span>Renomear música</span>
+                    </button>
+                    <button
+                      onClick={() => { onRemoveTrack(track.id); setOpenMenuId(null); }}
+                      className="flex items-center space-x-3 px-4 py-3 hover:bg-red-500/10 text-sm text-red-400 hover:text-red-300 transition-colors text-left"
+                    >
+                      <Trash2 size={16} className="text-red-400/60" />
+                      <span>Excluir da biblioteca</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-      </div>
-    </motion.div>
-  );
+      </motion.div>
+    );
+  });
 
   const getDisplayTracks = () => {
     let baseTracks: Track[] = [];
@@ -348,7 +381,26 @@ export default function Library({
                 </p>
               </div>
             ) : (
-              displayTracks.map((track, i) => renderTrackItem(track, i))
+              displayTracks.map((track, i) => (
+                <TrackItem
+                  key={track.id}
+                  track={track}
+                  index={i}
+                  currentTrackId={currentTrackId}
+                  openMenuId={openMenuId}
+                  onSelectTrack={onSelectTrack}
+                  onPlayNext={onPlayNext}
+                  onAddToQueue={onAddToQueue}
+                  onRemoveTrack={onRemoveTrack}
+                  setOpenMenuId={setOpenMenuId}
+                  setRenameModalOpen={setRenameModalOpen}
+                  setNewTrackName={setNewTrackName}
+                  setTargetCoverId={setTargetCoverId}
+                  coverInputRef={coverInputRef}
+                  setActiveTab={setActiveTab}
+                  setSelectedFolder={setSelectedFolder}
+                />
+              ))
             )}
           </>
         )}

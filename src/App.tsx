@@ -19,25 +19,25 @@ const extractDominantColor = (imageUrl: string, fallback: string = '#EAB308'): P
       return;
     }
 
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        resolve(fallback);
-        return;
-      }
+    const timeoutIdx = setTimeout(() => resolve(fallback), 2000);
 
-      canvas.width = 50;
-      canvas.height = 50;
-      ctx.drawImage(img, 0, 0, 50, 50);
-
+    const process = async () => {
       try {
+        const resp = await fetch(imageUrl);
+        const blob = await resp.blob();
+        const bitmap = await createImageBitmap(blob);
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) throw new Error('no ctx');
+
+        canvas.width = 50;
+        canvas.height = 50;
+        ctx.drawImage(bitmap, 0, 0, 50, 50);
+
         const imageData = ctx.getImageData(0, 0, 50, 50).data;
         let r = 0, g = 0, b = 0, count = 0;
 
-        // Simple pixel average
         for (let i = 0; i < imageData.length; i += 16) {
           r += imageData[i];
           g += imageData[i + 1];
@@ -49,7 +49,6 @@ const extractDominantColor = (imageUrl: string, fallback: string = '#EAB308'): P
         g = Math.floor(g / count);
         b = Math.floor(b / count);
 
-        // Boost saturation for better UI pop
         const max = Math.max(r, g, b);
         if (max > 0) {
           const multiplier = 255 / max;
@@ -58,13 +57,16 @@ const extractDominantColor = (imageUrl: string, fallback: string = '#EAB308'): P
           b = Math.min(255, Math.floor(b * multiplier * 0.8));
         }
 
+        clearTimeout(timeoutIdx);
+        bitmap.close();
         resolve(`rgb(${r}, ${g}, ${b})`);
       } catch (e) {
+        clearTimeout(timeoutIdx);
         resolve(fallback);
       }
     };
-    img.onerror = () => resolve(fallback);
-    img.src = imageUrl;
+
+    process();
   });
 };
 
@@ -364,27 +366,32 @@ export default function App() {
   }, [audioSource]);
 
   // ─── Track selection ─────────────────────────────────────────────────────
-  const handleAddToQueue = (file: File | any) => {
+  const handleAddToQueue = React.useCallback((file: File | any) => {
     const newTrack = file instanceof File
       ? { id: Date.now(), title: file.name.replace(/\.[^/.]+$/, ''), artist: 'Local File', isFile: true, file }
       : { ...file, id: Date.now() };
-    setQueue([...queue, newTrack]);
-  };
+    setQueue(prev => [...prev, newTrack]);
+  }, []);
 
-  const handlePlayNext = (file: File | any) => {
+  const handlePlayNext = React.useCallback((file: File | any) => {
     const newTrack = file instanceof File
       ? { id: Date.now(), title: file.name.replace(/\.[^/.]+$/, ''), artist: 'Local File', isFile: true, file }
       : { ...file, id: Date.now() };
 
-    const newQueue = [...queue];
-    const insertIndex = currentQueueIndex + 1;
-    newQueue.splice(insertIndex, 0, newTrack);
-    setQueue(newQueue);
-  };
+    setQueue(prev => {
+      const newQueue = [...prev];
+      const insertIndex = currentQueueIndex + 1;
+      newQueue.splice(insertIndex, 0, newTrack);
+      return newQueue;
+    });
+  }, [currentQueueIndex]);
 
-  const handleSelectTrack = (file: File | any, shouldPlay: boolean = true) => {
+  const handleSelectTrack = React.useCallback((file: File | any, shouldPlay: boolean = true) => {
     // Revoke old source but keep covers (base64 doesn't need revocation)
-    if (audioSource) URL.revokeObjectURL(audioSource);
+    setAudioSource(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
 
     // Save playing track to local storage
     if (file && file.id) {
@@ -599,9 +606,9 @@ export default function App() {
     } else if (!isCrossfading) {
       setActiveTab('player'); // start on player, but don't play
     }
-  };
+  }, [libraryTracks, autoEq, isCrossfading]);
 
-  const handleAddTracks = async (files: FileList | File[]) => {
+  const handleAddTracks = React.useCallback(async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
     const audioFiles = fileArray.filter(f => f.type.startsWith('audio/') || f.name.endsWith('.mp3') || f.name.endsWith('.flac') || f.name.endsWith('.wav'));
     const lrcFiles = fileArray.filter(f => f.name.endsWith('.lrc'));
@@ -680,9 +687,9 @@ export default function App() {
         console.warn('Failed to save track to DB:', err);
       }
     }
-  };
+  }, [libraryTracks]);
 
-  const handleRemoveTrack = async (id: number) => {
+  const handleRemoveTrack = React.useCallback(async (id: number) => {
     setLibraryTracks(prev => prev.filter(t => t.id !== id));
     setQueue(prev => prev.filter(t => t.id !== id));
     setRecentTracks(prev => prev.filter(t => t.id !== id));
@@ -691,22 +698,14 @@ export default function App() {
     } catch (err) {
       console.warn('Failed to delete track from DB:', err);
     }
-  };
+  }, []);
 
-  const handleRenameTrack = async (id: number, newName: string) => {
+  const handleRenameTrack = React.useCallback(async (id: number, newName: string) => {
     const updateList = (list: any[]) => list.map(t => t.id === id ? { ...t, title: newName } : t);
 
     setLibraryTracks(prev => updateList(prev));
     setQueue(prev => updateList(prev));
     setRecentTracks(prev => updateList(prev));
-
-    setTrackInfo(prev => {
-      // Se a música atual for a que está sendo renomeada (e não estiver usando metadados originais de arquivo fixo)
-      // Como não temos o ID atual no trackInfo facilmente, nós podemos atualizar condicionalmente:
-      // Apenas atualize state; o trackInfo da próxima vez que tocar vai puxar do state, ou podemos ignorar por ser um detalhe menor.
-      // Vou focar apenas nos arrays e no banco de dados.
-      return prev;
-    });
 
     const trackToUpdate = libraryTracks.find(t => t.id === id) || queue.find(t => t.id === id) || recentTracks.find(t => t.id === id);
     if (trackToUpdate) {
@@ -716,18 +715,18 @@ export default function App() {
         console.warn('Failed to update track in DB:', err);
       }
     }
-  };
+  }, [libraryTracks, queue, recentTracks]);
 
-  const handleUpdateCover = async (id: number, blob: Blob) => {
-    const updateList = (list: any[]) => list.map(t => t.id === id ? { ...t, coverBlob: blob } : t);
+  const handleUpdateCover = React.useCallback(async (id: number, blob: Blob) => {
+    const updateList = (list: any[]) => list.map(t => (t.id === id || t.id.toString() === id.toString()) ? { ...t, coverBlob: blob } : t);
 
+    // Perform all state updates first
     setLibraryTracks(prev => updateList(prev));
     setQueue(prev => updateList(prev));
     setRecentTracks(prev => updateList(prev));
 
-    // Update current track info if it matches
-    const currentFromLib = libraryTracks.find(t => t.id === id);
-    if (localStorage.getItem('lastPlayedTrackId') === id.toString() || (currentFromLib && trackInfo.title === currentFromLib.title)) {
+    const lastPlayedId = localStorage.getItem('lastPlayedTrackId');
+    if (lastPlayedId === id.toString() || trackInfo.title === libraryTracks.find(t => t.id === id)?.title) {
       setTrackInfo(prev => ({ ...prev, coverBlob: blob, coverUrl: '' }));
       const tempUrl = URL.createObjectURL(blob);
       extractDominantColor(tempUrl).then(setAccentColor).finally(() => {
@@ -735,15 +734,12 @@ export default function App() {
       });
     }
 
+    // Persist in background
     const trackToUpdate = libraryTracks.find(t => t.id === id) || queue.find(t => t.id === id) || recentTracks.find(t => t.id === id);
     if (trackToUpdate) {
-      try {
-        await saveTrack({ ...trackToUpdate, coverBlob: blob });
-      } catch (err) {
-        console.warn('Failed to update cover in DB:', err);
-      }
+      saveTrack({ ...trackToUpdate, coverBlob: blob }).catch(err => console.warn('Failed to update cover in DB:', err));
     }
-  };
+  }, [libraryTracks, queue, recentTracks, trackInfo]);
 
   const handleTrackEnded = () => {
     if (isRepeat) {
