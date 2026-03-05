@@ -1,3 +1,5 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Palette, Share2, Loader2, Download, Upload, ChevronRight, Laptop, Folder, Trash2, ShieldCheck } from 'lucide-react';
 import { clearAllTracks, exportLibraryData, importLibraryData, getAllTracks } from '../utils/db';
 
 interface SettingsProps {
