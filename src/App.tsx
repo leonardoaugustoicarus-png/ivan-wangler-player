@@ -25,6 +25,7 @@ const extractDominantColor = (imageUrl: string, fallback: string = '#EAB308'): P
       try {
         const resp = await fetch(imageUrl);
         const blob = await resp.blob();
+        if (blob.size === 0) throw new Error('Empty blob');
         const bitmap = await createImageBitmap(blob);
 
         const canvas = document.createElement('canvas');
@@ -228,11 +229,12 @@ export default function App() {
             jsmediatags.read(t.file, {
               onSuccess: (tag: any) => {
                 const { picture } = tag.tags;
-                if (picture) {
+                if (picture && picture.data && picture.data.length > 0) {
                   try {
                     const { data, format } = picture;
                     const uint8Array = new Uint8Array(data);
-                    const coverBlob = new Blob([uint8Array], { type: format });
+                    const mimeType = format.includes('/') ? format : `image/${format.toLowerCase()}`;
+                    const coverBlob = new Blob([uint8Array], { type: mimeType });
                     saveTrack({ ...t, coverBlob }).catch(() => { });
                     setLibraryTracks(prev => prev.map(lt => lt.id === t.id ? { ...lt, coverBlob } : lt));
                   } catch (e) {
@@ -401,15 +403,15 @@ export default function App() {
     const processFile = (fileToProcess: File, trackTitle: string, trackArtist: string, trackId?: number) => {
       const url = URL.createObjectURL(fileToProcess);
       setAudioSource(url);
-      setAudioSource(url);
 
       jsmediatags.read(fileToProcess, {
         onSuccess: (tag: any) => {
           const { title, artist, picture } = tag.tags;
-          if (picture) {
+          if (picture && picture.data && picture.data.length > 0) {
             const { data, format } = picture;
             const uint8Array = new Uint8Array(data);
-            const coverBlob = new Blob([uint8Array], { type: format });
+            const mimeType = format.includes('/') ? format : `image/${format.toLowerCase()}`;
+            const coverBlob = new Blob([uint8Array], { type: mimeType });
             // Create temporary URL only for extraction
             const tempUrl = URL.createObjectURL(coverBlob);
 
@@ -417,10 +419,13 @@ export default function App() {
               title: title || trackTitle,
               artist: artist || trackArtist,
               coverBlob: coverBlob,
-              coverUrl: '', // Will be handled by CoverImage
+              coverUrl: '',
               lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
             });
-            extractDominantColor(tempUrl).then(setAccentColor).finally(() => {
+
+            extractDominantColor(tempUrl).then(color => {
+              if (color) setAccentColor(color);
+            }).finally(() => {
               setTimeout(() => URL.revokeObjectURL(tempUrl), 1000);
             });
 
@@ -601,10 +606,14 @@ export default function App() {
 
     // If it's the initial load, we don't switch to player or auto-play
     if (shouldPlay && !isCrossfading) {
-      setActiveTab('player');
+      React.startTransition(() => {
+        setActiveTab('player');
+      });
       setIsPlaying(true);
     } else if (!isCrossfading) {
-      setActiveTab('player'); // start on player, but don't play
+      React.startTransition(() => {
+        setActiveTab('player');
+      });
     }
   }, [libraryTracks, autoEq, isCrossfading]);
 
@@ -635,9 +644,9 @@ export default function App() {
             if (picture) {
               try {
                 const { data, format } = picture;
-                // jsmediatags data can be an array of numbers or a TypedArray
                 const uint8Array = new Uint8Array(data);
-                coverBlob = new Blob([uint8Array], { type: format });
+                const mimeType = format.includes('/') ? format : `image/${format.toLowerCase()}`;
+                coverBlob = new Blob([uint8Array], { type: mimeType });
               } catch (e) {
                 console.warn('Failed to create cover Blob:', e);
               }

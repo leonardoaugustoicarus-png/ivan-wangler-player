@@ -128,7 +128,7 @@ export default function Library({
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: Math.min(index * 0.05, 1) }}
+        transition={{ delay: index < 15 ? index * 0.03 : 0, duration: 0.2 }}
         className={`group relative flex items-center p-3 rounded-3xl transition-all cursor-pointer border ${currentTrackId === track.id ? 'bg-accent/15 border-accent/30 shadow-lg' : 'hover:bg-white/5 border-transparent hover:border-white/5'}`}
       >
         <div
@@ -259,7 +259,7 @@ export default function Library({
     );
   });
 
-  const getDisplayTracks = () => {
+  const displayTracks = React.useMemo(() => {
     let baseTracks: Track[] = [];
     switch (activeTab) {
       case 'Fila': baseTracks = queue; break;
@@ -270,13 +270,12 @@ export default function Library({
     }
 
     if (!searchQuery) return baseTracks;
+    const q = searchQuery.toLowerCase();
     return baseTracks.filter(t =>
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.artist.toLowerCase().includes(searchQuery.toLowerCase())
+      t.title.toLowerCase().includes(q) ||
+      t.artist.toLowerCase().includes(q)
     );
-  };
-
-  const displayTracks = getDisplayTracks();
+  }, [activeTab, queue, recentTracks, tracks, selectedFolder, folders, searchQuery]);
 
   return (
     <div className="flex flex-col h-full px-6 pt-4 pb-8 overflow-hidden bg-black/20 backdrop-blur-xl">
