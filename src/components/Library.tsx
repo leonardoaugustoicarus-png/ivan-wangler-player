@@ -26,6 +26,7 @@ interface LibraryProps {
   recentTracks: Track[];
   queue: Track[];
   currentTrackId?: number;
+  onUpdateCover: (id: number, blob: Blob) => void;
 }
 
 type TabType = 'Biblioteca' | 'Fila' | 'Recentes' | 'Pastas';
@@ -41,7 +42,8 @@ export default function Library({
   tracks,
   recentTracks,
   queue,
-  currentTrackId
+  currentTrackId,
+  onUpdateCover
 }: LibraryProps) {
   const [activeTab, setActiveTab] = React.useState<TabType>('Biblioteca');
   const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null);
@@ -50,6 +52,8 @@ export default function Library({
   const [renameModalOpen, setRenameModalOpen] = React.useState<number | null>(null);
   const [newTrackName, setNewTrackName] = React.useState('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const coverInputRef = React.useRef<HTMLInputElement>(null);
+  const [targetCoverId, setTargetCoverId] = React.useState<number | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -60,6 +64,14 @@ export default function Library({
       } else {
         onAddTracks(files);
       }
+    }
+  };
+
+  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && targetCoverId !== null) {
+      onUpdateCover(targetCoverId, file);
+      setTargetCoverId(null);
     }
   };
 
@@ -175,6 +187,17 @@ export default function Library({
                       <span>Acessar álbum</span>
                     </button>
                   )}
+                  <button
+                    onClick={() => {
+                      setTargetCoverId(track.id);
+                      coverInputRef.current?.click();
+                      setOpenMenuId(null);
+                    }}
+                    className="flex items-center space-x-3 px-4 py-3 hover:bg-white/5 text-sm text-white/80 hover:text-white transition-colors text-left"
+                  >
+                    <Disc3 size={16} className="text-white/40" />
+                    <span>Alterar capa</span>
+                  </button>
                   <div className="h-px bg-white/10 mx-2 my-1" />
                   <button
                     onClick={() => {
@@ -251,6 +274,13 @@ export default function Library({
           >
             <Upload size={20} />
           </button>
+          <input
+            type="file"
+            ref={coverInputRef}
+            onChange={handleCoverChange}
+            className="hidden"
+            accept="image/*"
+          />
         </div>
       </div>
 

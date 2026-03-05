@@ -9,6 +9,8 @@ import Settings from './components/Settings';
 import ArchitectureDoc from './components/ArchitectureDoc';
 import Visualizer3D from './components/Visualizer3D';
 import { getAllTracks, saveTrack, deleteTrack } from './utils/db';
+// jsmediatags is loaded as a global script in index.html
+const jsmediatags = (window as any).jsmediatags;
 
 const extractDominantColor = (imageUrl: string, fallback: string = '#EAB308'): Promise<string> => {
   return new Promise((resolve) => {
@@ -213,12 +215,9 @@ export default function App() {
     if (isHealing || tracks.length === 0) return;
     setIsHealing(true);
     setHealingProgress({ current: 0, total: tracks.length });
-    const jsmediatags = (window as any).jsmediatags;
-    if (!jsmediatags) {
-      setIsHealing(false);
-      return;
-    }
+    setHealingProgress({ current: 0, total: tracks.length });
 
+    // Using the imported jsmediatags
     for (let i = 0; i < tracks.length; i++) {
       const t = tracks[i];
       try {
@@ -228,11 +227,15 @@ export default function App() {
               onSuccess: (tag: any) => {
                 const { picture } = tag.tags;
                 if (picture) {
-                  const { data, format } = picture;
-                  const uint8Array = new Uint8Array(data);
-                  const coverBlob = new Blob([uint8Array], { type: format });
-                  saveTrack({ ...t, coverBlob }).catch(() => { });
-                  setLibraryTracks(prev => prev.map(lt => lt.id === t.id ? { ...lt, coverBlob } : lt));
+                  try {
+                    const { data, format } = picture;
+                    const uint8Array = new Uint8Array(data);
+                    const coverBlob = new Blob([uint8Array], { type: format });
+                    saveTrack({ ...t, coverBlob }).catch(() => { });
+                    setLibraryTracks(prev => prev.map(lt => lt.id === t.id ? { ...lt, coverBlob } : lt));
+                  } catch (e) {
+                    console.warn('Failed to create cover Blob in healing:', e);
+                  }
                 }
                 resolve(null);
               },
@@ -391,59 +394,53 @@ export default function App() {
     const processFile = (fileToProcess: File, trackTitle: string, trackArtist: string, trackId?: number) => {
       const url = URL.createObjectURL(fileToProcess);
       setAudioSource(url);
-      const jsmediatags = (window as any).jsmediatags;
+      setAudioSource(url);
 
-      if (jsmediatags) {
-        jsmediatags.read(fileToProcess, {
-          onSuccess: (tag: any) => {
-            const { title, artist, picture } = tag.tags;
-            if (picture) {
-              const { data, format } = picture;
-              const uint8Array = new Uint8Array(data);
-              const coverBlob = new Blob([uint8Array], { type: format });
-              // Create temporary URL only for extraction
-              const tempUrl = URL.createObjectURL(coverBlob);
+      jsmediatags.read(fileToProcess, {
+        onSuccess: (tag: any) => {
+          const { title, artist, picture } = tag.tags;
+          if (picture) {
+            const { data, format } = picture;
+            const uint8Array = new Uint8Array(data);
+            const coverBlob = new Blob([uint8Array], { type: format });
+            // Create temporary URL only for extraction
+            const tempUrl = URL.createObjectURL(coverBlob);
 
-              setTrackInfo({
-                title: title || trackTitle,
-                artist: artist || trackArtist,
-                coverBlob: coverBlob,
-                coverUrl: '', // Will be handled by CoverImage
-                lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
-              });
-              extractDominantColor(tempUrl).then(setAccentColor).finally(() => {
-                setTimeout(() => URL.revokeObjectURL(tempUrl), 1000);
-              });
+            setTrackInfo({
+              title: title || trackTitle,
+              artist: artist || trackArtist,
+              coverBlob: coverBlob,
+              coverUrl: '', // Will be handled by CoverImage
+              lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
+            });
+            extractDominantColor(tempUrl).then(setAccentColor).finally(() => {
+              setTimeout(() => URL.revokeObjectURL(tempUrl), 1000);
+            });
 
-              if (trackId) {
-                const track = libraryTracks.find(t => t.id === trackId);
-                if (track) saveTrack({ ...track, coverBlob }).catch(() => { });
-              }
-            } else {
-              setTrackInfo({
-                title: title || trackTitle,
-                artist: artist || trackArtist,
-                coverUrl: '',
-                coverBlob: null,
-                lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
-              });
-              setAccentColor('#EAB308');
-              fetchAICover(title || trackTitle, artist || trackArtist, trackId);
+            if (trackId) {
+              const track = libraryTracks.find(t => t.id === trackId);
+              if (track) saveTrack({ ...track, coverBlob }).catch(() => { });
             }
-            if (autoEq) fetchAIEQProfile(title || trackTitle, artist || trackArtist);
-          },
-          onError: (error: any) => {
-            console.warn('Error reading tags:', error);
-            setTrackInfo({ title: trackTitle, artist: trackArtist, coverUrl: '', coverBlob: null, lyrics: (file as any).lyrics || '' });
-            fetchAICover(trackTitle, trackArtist, trackId);
-            if (autoEq) fetchAIEQProfile(trackTitle, trackArtist);
+          } else {
+            setTrackInfo({
+              title: title || trackTitle,
+              artist: artist || trackArtist,
+              coverUrl: '',
+              coverBlob: null,
+              lyrics: fileToProcess.type === 'audio/unknown' ? '' : (file as any).lyrics || ''
+            });
+            setAccentColor('#EAB308');
+            fetchAICover(title || trackTitle, artist || trackArtist, trackId);
           }
-        });
-      } else {
-        setTrackInfo({ title: trackTitle, artist: trackArtist, coverUrl: '', coverBlob: null, lyrics: (file as any).lyrics || '' });
-        fetchAICover(trackTitle, trackArtist, trackId);
-        if (autoEq) fetchAIEQProfile(trackTitle, trackArtist);
-      }
+          if (autoEq) fetchAIEQProfile(title || trackTitle, artist || trackArtist);
+        },
+        onError: (error: any) => {
+          console.warn('Error reading tags:', error);
+          setTrackInfo({ title: trackTitle, artist: trackArtist, coverUrl: '', coverBlob: null, lyrics: (file as any).lyrics || '' });
+          fetchAICover(trackTitle, trackArtist, trackId);
+          if (autoEq) fetchAIEQProfile(trackTitle, trackArtist);
+        }
+      });
     };
 
     const fetchAIEQProfile = async (title: string, artist: string) => {
@@ -620,24 +617,23 @@ export default function App() {
       }
     }
 
-    const jsmediatags = (window as any).jsmediatags;
-
     const extractMetadata = (file: File): Promise<{ title: string, artist: string, coverBlob: Blob | null }> => {
       return new Promise((resolve) => {
         const baseName = file.name.replace(/\.[^/.]+$/, '');
-        if (!jsmediatags) {
-          resolve({ title: baseName, artist: 'Local File', coverBlob: null });
-          return;
-        }
 
         jsmediatags.read(file, {
           onSuccess: (tag: any) => {
             const { title, artist, picture } = tag.tags;
             let coverBlob: Blob | null = null;
             if (picture) {
-              const { data, format } = picture;
-              const uint8Array = new Uint8Array(data);
-              coverBlob = new Blob([uint8Array], { type: format });
+              try {
+                const { data, format } = picture;
+                // jsmediatags data can be an array of numbers or a TypedArray
+                const uint8Array = new Uint8Array(data);
+                coverBlob = new Blob([uint8Array], { type: format });
+              } catch (e) {
+                console.warn('Failed to create cover Blob:', e);
+              }
             }
             resolve({
               title: title || baseName,
@@ -645,7 +641,8 @@ export default function App() {
               coverBlob: coverBlob
             });
           },
-          onError: () => {
+          onError: (err: any) => {
+            console.warn('Metadata extraction error for', file.name, err);
             resolve({ title: baseName, artist: 'Local File', coverBlob: null });
           }
         });
@@ -717,6 +714,33 @@ export default function App() {
         await saveTrack({ ...trackToUpdate, title: newName });
       } catch (err) {
         console.warn('Failed to update track in DB:', err);
+      }
+    }
+  };
+
+  const handleUpdateCover = async (id: number, blob: Blob) => {
+    const updateList = (list: any[]) => list.map(t => t.id === id ? { ...t, coverBlob: blob } : t);
+
+    setLibraryTracks(prev => updateList(prev));
+    setQueue(prev => updateList(prev));
+    setRecentTracks(prev => updateList(prev));
+
+    // Update current track info if it matches
+    const currentFromLib = libraryTracks.find(t => t.id === id);
+    if (localStorage.getItem('lastPlayedTrackId') === id.toString() || (currentFromLib && trackInfo.title === currentFromLib.title)) {
+      setTrackInfo(prev => ({ ...prev, coverBlob: blob, coverUrl: '' }));
+      const tempUrl = URL.createObjectURL(blob);
+      extractDominantColor(tempUrl).then(setAccentColor).finally(() => {
+        setTimeout(() => URL.revokeObjectURL(tempUrl), 1000);
+      });
+    }
+
+    const trackToUpdate = libraryTracks.find(t => t.id === id) || queue.find(t => t.id === id) || recentTracks.find(t => t.id === id);
+    if (trackToUpdate) {
+      try {
+        await saveTrack({ ...trackToUpdate, coverBlob: blob });
+      } catch (err) {
+        console.warn('Failed to update cover in DB:', err);
       }
     }
   };
@@ -1055,6 +1079,7 @@ export default function App() {
                   recentTracks={recentTracks}
                   queue={queue}
                   currentTrackId={queue[currentQueueIndex]?.id}
+                  onUpdateCover={handleUpdateCover}
                 />
               </motion.div>
             )}
