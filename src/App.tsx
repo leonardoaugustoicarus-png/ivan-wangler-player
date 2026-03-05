@@ -100,6 +100,21 @@ export default function App() {
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [isHealing, setIsHealing] = useState(false);
   const [healingProgress, setHealingProgress] = useState({ current: 0, total: 0 });
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
 
   // EQ & DSP State
   const [eqGains, setEqGains] = useState<number[]>(new Array(15).fill(0));
@@ -432,6 +447,7 @@ export default function App() {
     };
 
     const fetchAIEQProfile = async (title: string, artist: string) => {
+      if (!isOnline) return;
       const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
       if (!apiKey) return;
 
@@ -462,6 +478,7 @@ export default function App() {
     };
 
     const fetchAICover = async (title: string, artist: string, trackId?: number) => {
+      if (!isOnline) return;
       const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
       if (!apiKey) return;
 
@@ -909,6 +926,13 @@ export default function App() {
                 <Zap size={16} fill="currentColor" />
               </button>
             )}
+            {!isOnline && (
+              <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-red-500/20 text-red-100 border border-red-500/30 backdrop-blur-md">
+                <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Offline</span>
+              </div>
+            )}
+
             <button
               onClick={() => setActiveTab(activeTab === 'arch' ? 'player' : 'arch')}
               className={`p-2 rounded-xl glass-card transition-all ${activeTab === 'arch' ? 'bg-white text-black' : 'text-white/60 hover:text-white'}`}
